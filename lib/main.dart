@@ -63,6 +63,7 @@ class TripPlannerFormState extends State<TripPlannerForm> {
   final _toController = TextEditingController();
   final LatLong _toLoc = LatLong(0.0, 0.0);
   DateTime _timeController = DateTime.now();
+  String leavingArrivingDropdownValue = 'Leaving now';
   List<AutocompletePrediction> predictions = [];
 
   @override
@@ -83,59 +84,96 @@ class TripPlannerFormState extends State<TripPlannerForm> {
                   _toController, _toLoc, "To", "Where are you going?"),
             ),
             Padding(
-              padding: formPadding,
-              child: DateTimePicker(
-                  type: DateTimePickerType.dateTimeSeparate,
-                  initialValue: DateTime.now().toString(),
-                  firstDate: DateTime(2022),
-                  lastDate: DateTime(2100),
-                  icon: const Icon(Icons.calendar_today),
-                  dateLabelText: 'Date',
-                  timeLabelText: 'Time',
-                  onChanged: (val) {
-                    _timeController = DateTime.parse(val);
-                  }),
-
-              //onSaved: (val) => print(val)),
+              padding: EdgeInsets.only(left: 16.0, right: 16.0, top: 16.0),
+              child: DropdownButton<String>(
+                value: leavingArrivingDropdownValue,
+                icon: const Icon(Icons.arrow_downward),
+                elevation: 16,
+                //style: const TextStyle(color: Colors.deepPurple),
+                underline: Container(
+                  height: 2,
+                  color: Colors.deepPurpleAccent,
+                ),
+                onChanged: (String? newValue) {
+                  setState(() {
+                    leavingArrivingDropdownValue = newValue!;
+                  });
+                },
+                items: <String>['Leaving now', 'Leave at', 'Arrive by']
+                    .map<DropdownMenuItem<String>>((String value) {
+                  return DropdownMenuItem<String>(
+                    value: value,
+                    child: Text(value),
+                  );
+                }).toList(),
+              ),
             ),
-            ElevatedButton(
-                onPressed: () {
-                  if (_formKey.currentState != null &&
-                      _formKey.currentState!.validate()) {
-                    // If the form is valid, display a Snackbar.
-                    ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('loading routes...')));
-                    /*
+            Visibility(
+              visible: leavingArrivingDropdownValue != 'Leaving now',
+              maintainAnimation: true,
+              maintainState: true,
+              child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16.0),
+                  child: DateTimePicker(
+                      type: DateTimePickerType.dateTimeSeparate,
+                      initialValue: DateTime.now().toString(),
+                      firstDate: DateTime(2022),
+                      lastDate: DateTime(2100),
+                      icon: const Icon(Icons.calendar_today),
+                      dateLabelText: 'Date',
+                      timeLabelText: 'Time',
+                      onChanged: (val) {
+                        _timeController = DateTime.parse(val);
+                      })),
+            ),
+
+            //onSaved: (val) => print(val)),
+            Padding(
+                padding: formPadding,
+                child: ElevatedButton(
+                    onPressed: () {
+                      if (_formKey.currentState != null &&
+                          _formKey.currentState!.validate()) {
+                        // If the form is valid, display a Snackbar.
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('loading routes...')));
+                        /*
                     final itinerariesFuture =
                         OpenTripPlannerWrapper.getItineraries({
                       "fromPlace": "47.638184,-122.159497",
                       "toPlace": "47.620937,-122.297215",
                     });
                     */
-                    final itinerariesFuture =
-                        OpenTripPlannerWrapper.getItineraries({
-                      "fromPlace": _fromLoc.toString(),
-                      "toPlace": _toLoc.toString(),
-                      "mode": "TRANSIT, BICYCLE",
-                      "optimize": "TRANSFERS",
-                      //"time": (DateTime.now().millisecondsSinceEpoch / 1000)
-                      //    .toString(),
-                      "arriveBy": "false",
-                      "time":
-                          "${_timeController.hour}:${_timeController.minute}",
-                      "date":
-                          "${_timeController.year}-${_timeController.month}-${_timeController.day}",
-                      "showIntermediateStops": "true",
-                      "maxWalkDistance": "99999999999",
-                    });
-                    itinerariesFuture.then((value) {
-                      //_ItinerariesViewerState.setText(itineraries);
-                      Navigator.of(context).push(MaterialPageRoute(
-                          builder: (context) => ResultsPage(value)));
-                    });
-                  }
-                },
-                child: const Text('Submit'))
+                        Map<String, String> params = {
+                          "fromPlace": _fromLoc.toString(),
+                          "toPlace": _toLoc.toString(),
+                          "mode": "TRANSIT, BICYCLE",
+                          "optimize": "TRANSFERS",
+                          //"time": (DateTime.now().millisecondsSinceEpoch / 1000)
+                          //    .toString(),
+                          "arriveBy":
+                              (leavingArrivingDropdownValue == 'Arrive by')
+                                  .toString(),
+                          "showIntermediateStops": "true",
+                          "maxWalkDistance": "99999999999",
+                        };
+                        if (leavingArrivingDropdownValue != 'Leaving now') {
+                          params['time'] =
+                              "${_timeController.hour}:${_timeController.minute}";
+                          params['date'] =
+                              "${_timeController.year}-${_timeController.month}-${_timeController.day}";
+                        }
+
+                        final itinerariesFuture =
+                            OpenTripPlannerWrapper.getItineraries(params);
+                        itinerariesFuture.then((value) {
+                          //_ItinerariesViewerState.setText(itineraries);
+                          Navigator.of(context).push(MaterialPageRoute(
+                              builder: (context) => ResultsPage(value)));
+                        });
+                      }
+                    },
+                    child: const Text('Submit')))
           ],
         ));
   }
