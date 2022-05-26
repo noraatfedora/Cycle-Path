@@ -9,7 +9,7 @@ import 'package:biking_to_the_bus_stop/otp.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_typeahead/flutter_typeahead.dart';
 import 'package:google_place/google_place.dart';
-import 'package:intl/intl_browser.dart';
+import 'package:intl/intl.dart';
 
 Future main() async {
   await dotenv.load(fileName: '.env');
@@ -101,6 +101,8 @@ class TripPlannerFormState extends State<TripPlannerForm> {
                         OpenTripPlannerWrapper.getItineraries({
                       "fromPlace": _fromLoc.toString(),
                       "toPlace": _toLoc.toString(),
+                      "mode": "TRANSIT, BICYCLE",
+                      "optimize": "TRANSFERS",
                     });
                     itinerariesFuture.then((value) {
                       //_ItinerariesViewerState.setText(itineraries);
@@ -112,6 +114,82 @@ class TripPlannerFormState extends State<TripPlannerForm> {
                 child: const Text('Submit'))
           ],
         ));
+  }
+
+  double metersToMiles(double meters) {
+    return meters * 0.000621371;
+  }
+
+  ListTile renderLeg(Map<String, dynamic> leg) {
+    final icons = {
+      "WALK": Icons.directions_walk,
+      "BICYCLE": Icons.directions_bike,
+      "TRANSIT": Icons.directions_bus,
+      "FERRY": Icons.directions_boat,
+      "RAIL": Icons.directions_railway,
+      "SUBWAY": Icons.directions_subway,
+      "TRAIN": Icons.directions_transit,
+      "BUS": Icons.directions_bus,
+      "TRAM": Icons.directions_subway,
+    };
+    late IconData icon;
+    if (icons.containsKey(leg["mode"])) {
+      icon = icons[leg["mode"]]!;
+    } else {
+      icon = Icons.directions_transit;
+    }
+
+    late String subtitle;
+    String prettyDistance =
+        "${metersToMiles(leg['distance']!).toStringAsFixed(1)} miles";
+    // if distance is less than 0.1 miles, display distance in feet
+    if (metersToMiles(leg['distance']!) < 0.1) {
+      // convert meters to feet
+      prettyDistance =
+          "${(leg['distance']! * 3.28084).toStringAsFixed(0)} feet";
+    }
+    String minutes = (leg['duration']! ~/ 60).toString();
+    String distanceInfo = '$prettyDistance | $minutes minutes';
+    if (leg['transitLeg']) {
+      if (leg.containsKey('routeShortName')) {
+        if (leg.containsKey('headsign')) {
+          subtitle = '${leg["routeShortName"]}: ${leg["headsign"]}';
+        } else {
+          subtitle = '${leg["routeShortName"]}';
+        }
+      } else {
+        if (leg.containsKey('headsign')) {
+          subtitle = '${leg["headsign"]}';
+        } else {
+          subtitle = '${leg["mode"]}';
+        }
+      }
+    } else {
+      String verb = 'Bike';
+      if (leg['mode'] != 'BICYCLE') {
+        // convert the leg mode to start with an
+        // uppercase letter
+        verb = leg['mode'][0].toUpperCase() +
+            leg['mode'].toLowerCase().substring(1);
+      }
+      subtitle = "${verb} ${distanceInfo}";
+    }
+
+    if (leg['transitLeg']) {
+      return ListTile(
+        leading: Icon(icon),
+        title: Text(leg['from']['name']),
+        subtitle: Text(subtitle),
+        trailing: Icon(Icons.arrow_forward_rounded),
+      );
+    } else {
+      return ListTile(
+        leading: Icon(icon),
+        title: Text(leg['from']['name']),
+        subtitle: Text(subtitle),
+        trailing: Icon(Icons.arrow_forward_rounded),
+      );
+    }
   }
 
   Widget googleAutocompleteFormField(TextEditingController controller,
@@ -166,21 +244,24 @@ class TripPlannerFormState extends State<TripPlannerForm> {
     // iterate through itineraries
     for (var i = 0; i < itineraries.length; i++) {
       var itinerary = itineraries[i];
+      var durationString = '';
+      if (itinerary['duration'] > 3600) {
+        // more than an hour
+        durationString = '${(itinerary['duration'] / 3600).floor()} hours, ';
+      }
+      durationString += '${(itinerary['duration'] % 3600) ~/ 60} minutes';
       tabTitles.add(Column(
         children: [
-          Text(itinerary["duration"].toString()),
-          Text(itinerary["startTime"].toString()),
-          Text(itinerary["endTime"].toString()),
+          Text(durationString),
+          Text(convertUnixToReadable(itinerary['startTime'])),
+          Text(convertUnixToReadable(itinerary["endTime"])),
         ],
       ));
       final legsChildren = <Widget>[];
       // iterate through itinerary legs
       for (var j = 0; j < itinerary['legs'].length; j++) {
         var leg = itinerary['legs'][j];
-        legsChildren.add(ListTile(
-          title: Text(leg['from']['name']),
-          subtitle: Text(leg['to']['name']),
-        ));
+        legsChildren.add(renderLeg(leg));
       }
       var legs = ListView(
         children: legsChildren,
@@ -202,6 +283,11 @@ class TripPlannerFormState extends State<TripPlannerForm> {
     );
     //return Scaffold(appBar: AppBar(title: const Text('Results')), body: ta);
     return tabController;
+  }
+
+  String convertUnixToReadable(int unixTime) {
+    var date = DateTime.fromMillisecondsSinceEpoch(unixTime * 1000);
+    return DateFormat('hh:mm a').format(date);
   }
 
   void autoCompleteSearch(String value) async {
