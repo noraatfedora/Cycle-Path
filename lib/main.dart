@@ -102,6 +102,7 @@ class TripPlannerFormState extends State<TripPlannerForm> {
                       //"time": (DateTime.now().millisecondsSinceEpoch / 1000)
                       //    .toString(),
                       "arriveBy": "false",
+                      "showIntermediateStops": "true",
                       "maxWalkDistance": "99999999999",
                     });
                     itinerariesFuture.then((value) {
@@ -149,6 +150,27 @@ String getFancyRouteName(leg) {
   return transitInfo;
 }
 
+IconData getIconFromMode(String mode) {
+  final icons = {
+    "WALK": Icons.directions_walk,
+    "BICYCLE": Icons.directions_bike,
+    "TRANSIT": Icons.directions_bus,
+    "FERRY": Icons.directions_boat,
+    "RAIL": Icons.directions_railway,
+    "SUBWAY": Icons.directions_subway,
+    "TRAIN": Icons.directions_transit,
+    "BUS": Icons.directions_bus,
+    "TRAM": Icons.directions_subway,
+  };
+  late IconData icon;
+  if (icons.containsKey(mode)) {
+    icon = icons[mode]!;
+  } else {
+    icon = Icons.directions_transit;
+  }
+  return icon;
+}
+
 class LegOverview extends StatelessWidget {
   //  const LegOverview({Key? key}) : super(key: key);
   final leg;
@@ -156,23 +178,6 @@ class LegOverview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final icons = {
-      "WALK": Icons.directions_walk,
-      "BICYCLE": Icons.directions_bike,
-      "TRANSIT": Icons.directions_bus,
-      "FERRY": Icons.directions_boat,
-      "RAIL": Icons.directions_railway,
-      "SUBWAY": Icons.directions_subway,
-      "TRAIN": Icons.directions_transit,
-      "BUS": Icons.directions_bus,
-      "TRAM": Icons.directions_subway,
-    };
-    late IconData icon;
-    if (icons.containsKey(leg["mode"])) {
-      icon = icons[leg["mode"]]!;
-    } else {
-      icon = Icons.directions_transit;
-    }
     String prettyDistance = getPrettyDistance(leg['distance']!);
     String minutes = (leg['duration']! ~/ 60).toString();
     String distanceInfo = '$prettyDistance | $minutes minutes';
@@ -196,7 +201,7 @@ class LegOverview extends StatelessWidget {
       onTap = NonTransitLegDetails(leg);
     }
     return ListTile(
-      leading: Icon(icon),
+      leading: Icon(getIconFromMode(leg['mode'])),
       title: RichText(
         text: TextSpan(
           // display the title and the time
@@ -230,10 +235,27 @@ class TransitLegDetails extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(getFancyRouteName(leg)),
-      ),
-      body: Text("Placeholder"),
+        appBar: AppBar(
+          title: Text(getFancyRouteName(leg)),
+        ),
+        body: ListView.builder(
+            itemCount: leg["intermediateStops"].length,
+            itemBuilder: (context, index) {
+              return TransitStop(leg['intermediateStops'][index], leg['mode']);
+            }));
+  }
+}
+
+class TransitStop extends StatelessWidget {
+  final stop;
+  final mode;
+  const TransitStop(this.stop, this.mode);
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(getIconFromMode(mode)),
+      title: Text(stop['name']),
+      subtitle: Text(convertUnixToReadable(stop['arrival'])),
     );
   }
 }
