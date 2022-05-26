@@ -10,6 +10,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_typeahead/flutter_typeahead.dart';
 import 'package:google_place/google_place.dart';
 import 'package:intl/intl.dart';
+import 'package:date_time_picker/date_time_picker.dart';
 
 Future main() async {
   await dotenv.load(fileName: '.env');
@@ -25,10 +26,11 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Gongle Naps',
+      title: 'Cycle Path',
       home: Scaffold(
         appBar: AppBar(
-          title: const Text('Gongle Naps'),
+          leading: const Icon(Icons.directions_bike),
+          title: const Text('Cycle Path'),
         ),
         body: Center(
           child: TripPlannerForm(),
@@ -60,6 +62,7 @@ class TripPlannerFormState extends State<TripPlannerForm> {
   final LatLong _fromLoc = LatLong(0.0, 0.0);
   final _toController = TextEditingController();
   final LatLong _toLoc = LatLong(0.0, 0.0);
+  DateTime _timeController = DateTime.now();
   List<AutocompletePrediction> predictions = [];
 
   @override
@@ -78,6 +81,22 @@ class TripPlannerFormState extends State<TripPlannerForm> {
               padding: formPadding,
               child: googleAutocompleteFormField(
                   _toController, _toLoc, "To", "Where are you going?"),
+            ),
+            Padding(
+              padding: formPadding,
+              child: DateTimePicker(
+                  type: DateTimePickerType.dateTimeSeparate,
+                  initialValue: DateTime.now().toString(),
+                  firstDate: DateTime(2022),
+                  lastDate: DateTime(2100),
+                  icon: const Icon(Icons.calendar_today),
+                  dateLabelText: 'Date',
+                  timeLabelText: 'Time',
+                  onChanged: (val) {
+                    _timeController = DateTime.parse(val);
+                  }),
+
+              //onSaved: (val) => print(val)),
             ),
             ElevatedButton(
                 onPressed: () {
@@ -102,6 +121,10 @@ class TripPlannerFormState extends State<TripPlannerForm> {
                       //"time": (DateTime.now().millisecondsSinceEpoch / 1000)
                       //    .toString(),
                       "arriveBy": "false",
+                      "time":
+                          "${_timeController.hour}:${_timeController.minute}",
+                      "date":
+                          "${_timeController.year}-${_timeController.month}-${_timeController.day}",
                       "showIntermediateStops": "true",
                       "maxWalkDistance": "99999999999",
                     });
