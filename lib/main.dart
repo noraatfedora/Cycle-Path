@@ -16,6 +16,9 @@ Future main() async {
   runApp(const MyApp());
 }
 
+final String googleApiKey = dotenv.env['GOOGLE_API_KEY'].toString();
+final GooglePlace googlePlace = GooglePlace(googleApiKey);
+
 class MyApp extends StatelessWidget {
   const MyApp({Key? key}) : super(key: key);
 
@@ -57,14 +60,7 @@ class TripPlannerFormState extends State<TripPlannerForm> {
   final LatLong _fromLoc = LatLong(0.0, 0.0);
   final _toController = TextEditingController();
   final LatLong _toLoc = LatLong(0.0, 0.0);
-  late GooglePlace googlePlace;
   List<AutocompletePrediction> predictions = [];
-
-  @override
-  void initState() {
-    String apiKey = dotenv.env['GOOGLE_API_KEY'].toString();
-    googlePlace = GooglePlace(apiKey);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -103,11 +99,15 @@ class TripPlannerFormState extends State<TripPlannerForm> {
                       "toPlace": _toLoc.toString(),
                       "mode": "TRANSIT, BICYCLE",
                       "optimize": "TRANSFERS",
+                      //"time": (DateTime.now().millisecondsSinceEpoch / 1000)
+                      //    .toString(),
+                      "arriveBy": "false",
+                      "maxWalkDistance": "99999999999",
                     });
                     itinerariesFuture.then((value) {
                       //_ItinerariesViewerState.setText(itineraries);
                       Navigator.of(context).push(MaterialPageRoute(
-                          builder: (context) => resultsPage(value)));
+                          builder: (context) => ResultsPage(value)));
                     });
                   }
                 },
@@ -115,12 +115,47 @@ class TripPlannerFormState extends State<TripPlannerForm> {
           ],
         ));
   }
+}
 
-  double metersToMiles(double meters) {
-    return meters * 0.000621371;
+double metersToMiles(double meters) {
+  return meters * 0.000621371;
+}
+
+String getPrettyDistance(double meters) {
+  String prettyDistance = "${metersToMiles(meters).toStringAsFixed(1)} miles";
+  // if distance is less than 0.1 miles, display distance in feet
+  if (metersToMiles(meters) < 0.1) {
+    // convert meters to feet
+    prettyDistance = "${(meters! * 3.28084).toStringAsFixed(0)} feet";
   }
+  return prettyDistance;
+}
 
-  ListTile renderLeg(Map<String, dynamic> leg) {
+String getFancyRouteName(leg) {
+  late String transitInfo;
+  if (leg.containsKey('routeShortName')) {
+    if (leg.containsKey('headsign')) {
+      transitInfo = '${leg["routeShortName"]}: ${leg["headsign"]}';
+    } else {
+      transitInfo = '${leg["routeShortName"]}';
+    }
+  } else {
+    if (leg.containsKey('headsign')) {
+      transitInfo = '${leg["headsign"]}';
+    } else {
+      transitInfo = '${leg["mode"]}';
+    }
+  }
+  return transitInfo;
+}
+
+class LegOverview extends StatelessWidget {
+  //  const LegOverview({Key? key}) : super(key: key);
+  final leg;
+  const LegOverview(this.leg);
+
+  @override
+  Widget build(BuildContext context) {
     final icons = {
       "WALK": Icons.directions_walk,
       "BICYCLE": Icons.directions_bike,
@@ -138,32 +173,16 @@ class TripPlannerFormState extends State<TripPlannerForm> {
     } else {
       icon = Icons.directions_transit;
     }
-
-    late String subtitle;
-    String prettyDistance =
-        "${metersToMiles(leg['distance']!).toStringAsFixed(1)} miles";
-    // if distance is less than 0.1 miles, display distance in feet
-    if (metersToMiles(leg['distance']!) < 0.1) {
-      // convert meters to feet
-      prettyDistance =
-          "${(leg['distance']! * 3.28084).toStringAsFixed(0)} feet";
-    }
+    String prettyDistance = getPrettyDistance(leg['distance']!);
     String minutes = (leg['duration']! ~/ 60).toString();
     String distanceInfo = '$prettyDistance | $minutes minutes';
+    late String title;
+    late String subtitle;
+    final Widget onTap;
     if (leg['transitLeg']) {
-      if (leg.containsKey('routeShortName')) {
-        if (leg.containsKey('headsign')) {
-          subtitle = '${leg["routeShortName"]}: ${leg["headsign"]}';
-        } else {
-          subtitle = '${leg["routeShortName"]}';
-        }
-      } else {
-        if (leg.containsKey('headsign')) {
-          subtitle = '${leg["headsign"]}';
-        } else {
-          subtitle = '${leg["mode"]}';
-        }
-      }
+      title = "Get on ${leg["agencyName"]} ${getFancyRouteName(leg)}";
+      subtitle = distanceInfo;
+      onTap = TransitLegDetails(leg);
     } else {
       String verb = 'Bike';
       if (leg['mode'] != 'BICYCLE') {
@@ -172,73 +191,189 @@ class TripPlannerFormState extends State<TripPlannerForm> {
         verb = leg['mode'][0].toUpperCase() +
             leg['mode'].toLowerCase().substring(1);
       }
-      subtitle = "${verb} ${distanceInfo}";
+      title = "$verb from ${leg['from']['name']} to ${leg["to"]["name"]}";
+      subtitle = distanceInfo;
+      onTap = NonTransitLegDetails(leg);
     }
-
-    if (leg['transitLeg']) {
-      return ListTile(
-        leading: Icon(icon),
-        title: Text(leg['from']['name']),
-        subtitle: Text(subtitle),
-        trailing: Icon(Icons.arrow_forward_rounded),
-      );
-    } else {
-      return ListTile(
-        leading: Icon(icon),
-        title: Text(leg['from']['name']),
-        subtitle: Text(subtitle),
-        trailing: Icon(Icons.arrow_forward_rounded),
-      );
-    }
-  }
-
-  Widget googleAutocompleteFormField(TextEditingController controller,
-      LatLong loc, String labelText, String hintText) {
-    return TypeAheadFormField(
-      textFieldConfiguration: TextFieldConfiguration(
-        decoration: InputDecoration(
-          labelText: labelText,
-          hintText: hintText,
-          border: UnderlineInputBorder(),
+    return ListTile(
+      leading: Icon(icon),
+      title: RichText(
+        text: TextSpan(
+          // display the title and the time
+          children: [
+            TextSpan(
+                text: '${convertUnixToReadable(leg["startTime"]).toString()}',
+                style: TextStyle(
+                    fontSize: 14.0, color: Colors.black.withOpacity(0.5))),
+            TextSpan(
+                text: '\n$title',
+                style: TextStyle(fontSize: 18.0, color: Colors.black)),
+          ],
         ),
-        controller: controller,
       ),
-      suggestionsCallback: (pattern) async {
-        if (pattern != null && pattern.isNotEmpty) {
-          var result = await googlePlace.autocomplete.get(pattern);
-          if (result != null) {
-            return result.predictions!;
-          }
-        }
-        return <AutocompletePrediction>[];
-      },
-      itemBuilder: (context, AutocompletePrediction suggestion) {
-        return ListTile(
-          title: Text(suggestion.description!),
-        );
-      },
-      transitionBuilder: (context, suggestionsBox, controller) {
-        return suggestionsBox;
-      },
-      onSuggestionSelected: (AutocompletePrediction suggestion) async {
-        controller.text = suggestion.description!;
-        DetailsResponse? detailsResult =
-            await googlePlace.details.get(suggestion.placeId!);
-        if (detailsResult != null) {
-          loc.lat = detailsResult.result!.geometry!.location!.lat!;
-          loc.lon = detailsResult.result!.geometry!.location!.lng!;
-        }
-      },
-      validator: (value) {
-        if (value == null || value.isEmpty) {
-          return 'Please enter a location';
-        }
-        return null;
-      },
+      contentPadding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      subtitle: Text(subtitle),
+      trailing: Icon(Icons.arrow_forward_rounded),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => onTap,
+        ),
+      ),
     );
   }
+}
 
-  Widget resultsPage(List<dynamic> itineraries) {
+class TransitLegDetails extends StatelessWidget {
+  final leg;
+  const TransitLegDetails(this.leg);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(getFancyRouteName(leg)),
+      ),
+      body: Text("Placeholder"),
+    );
+  }
+}
+
+class NonTransitLegDetails extends StatelessWidget {
+  final leg;
+  const NonTransitLegDetails(this.leg);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(getFancyRouteName(leg)),
+      ),
+      body: ListView.builder(
+        itemCount: leg["steps"].length,
+        itemBuilder: (BuildContext context, int index) {
+          return WalkStep(leg['steps'][index], leg['mode']);
+        },
+      ),
+    );
+  }
+}
+
+IconData getIconFromDirection(String direction, String mode) {
+  final icons = {
+    "LEFT": Icons.turn_left,
+    "HARD_LEFT": Icons.turn_sharp_left,
+    "SLIGHTLY_LEFT": Icons.turn_slight_left,
+    "RIGHT": Icons.turn_right,
+    "HARD_RIGHT": Icons.turn_sharp_right,
+    "SLIGHTLY_RIGHT": Icons.turn_slight_right,
+    "CONTINUE": Icons.arrow_upward_rounded,
+    "ELEVATOR": Icons.elevator,
+    "UTURN_LEFT": Icons.u_turn_left,
+    "UTURN_RIGHT": Icons.u_turn_right,
+  };
+  if (icons.containsKey(direction)) {
+    return icons[direction]!;
+  } else {
+    if (mode == 'BICYCLE') {
+      return Icons.directions_bike;
+    } else if (mode == 'WALK') {
+      return Icons.directions_walk;
+    } else {
+      return Icons.arrow_forward_rounded;
+    }
+  }
+}
+
+String getFriendlyDirection(String direction) {
+  final directions = {
+    "DEPART": "Depart from",
+    "LEFT": "Turn left onto",
+    "HARD_LEFT": "Make a hard left onto",
+    "SLIGHTLY_LEFT": "Turn slightly left onto",
+    "RIGHT": "Turn right onto",
+    "HARD_RIGHT": "Make a hard right onto",
+    "SLIGHTLY_RIGHT": "Turn slightly right onto",
+    "CONTINUE": "Continue onto",
+    "ELEVATOR": "Take the elevator to",
+    "UTURN_LEFT": "Make a U-turn left onto",
+    "UTURN_RIGHT": "Make a U-turn right onto",
+    "CIRCLE_CLOCKWISE": "Take a circle clockwise onto",
+    "CIRLCE_COUNTERCLOCKWISE": "Take a circle counterclockwise onto",
+  };
+  if (directions.containsKey(direction)) {
+    return directions[direction]!;
+  } else {
+    return "";
+  }
+}
+
+class WalkStep extends StatelessWidget {
+  final data;
+  final mode;
+  const WalkStep(this.data, this.mode);
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(getIconFromDirection(data['relativeDirection'], mode)),
+      title: Text(
+          '${getFriendlyDirection(data['relativeDirection'])} ${data['streetName']}'),
+      subtitle: Text(getPrettyDistance(data["distance"])),
+    );
+  }
+}
+
+Widget googleAutocompleteFormField(TextEditingController controller,
+    LatLong loc, String labelText, String hintText) {
+  return TypeAheadFormField(
+    textFieldConfiguration: TextFieldConfiguration(
+      decoration: InputDecoration(
+        labelText: labelText,
+        hintText: hintText,
+        border: UnderlineInputBorder(),
+      ),
+      controller: controller,
+    ),
+    suggestionsCallback: (pattern) async {
+      if (pattern != null && pattern.isNotEmpty) {
+        var result = await googlePlace.autocomplete.get(pattern);
+        if (result != null) {
+          return result.predictions!;
+        }
+      }
+      return <AutocompletePrediction>[];
+    },
+    itemBuilder: (context, AutocompletePrediction suggestion) {
+      return ListTile(
+        title: Text(suggestion.description!),
+      );
+    },
+    transitionBuilder: (context, suggestionsBox, controller) {
+      return suggestionsBox;
+    },
+    onSuggestionSelected: (AutocompletePrediction suggestion) async {
+      controller.text = suggestion.description!;
+      DetailsResponse? detailsResult =
+          await googlePlace.details.get(suggestion.placeId!);
+      if (detailsResult != null) {
+        loc.lat = detailsResult.result!.geometry!.location!.lat!;
+        loc.lon = detailsResult.result!.geometry!.location!.lng!;
+      }
+    },
+    validator: (value) {
+      if (value == null || value.isEmpty) {
+        return 'Please enter a location';
+      }
+      return null;
+    },
+  );
+}
+
+class ResultsPage extends StatelessWidget {
+  final List<dynamic> itineraries;
+  const ResultsPage(this.itineraries);
+
+  @override
+  Widget build(BuildContext context) {
     var tabChildren = <Widget>[];
     var tabTitles = <Widget>[];
     // iterate through itineraries
@@ -253,15 +388,15 @@ class TripPlannerFormState extends State<TripPlannerForm> {
       tabTitles.add(Column(
         children: [
           Text(durationString),
-          Text(convertUnixToReadable(itinerary['startTime'])),
-          Text(convertUnixToReadable(itinerary["endTime"])),
+          Text(
+              "${convertUnixToReadable(itinerary['startTime'])}-${convertUnixToReadable(itinerary['endTime'])}"),
         ],
       ));
       final legsChildren = <Widget>[];
       // iterate through itinerary legs
       for (var j = 0; j < itinerary['legs'].length; j++) {
         var leg = itinerary['legs'][j];
-        legsChildren.add(renderLeg(leg));
+        legsChildren.add(LegOverview(leg));
       }
       var legs = ListView(
         children: legsChildren,
@@ -284,19 +419,9 @@ class TripPlannerFormState extends State<TripPlannerForm> {
     //return Scaffold(appBar: AppBar(title: const Text('Results')), body: ta);
     return tabController;
   }
+}
 
-  String convertUnixToReadable(int unixTime) {
-    var date = DateTime.fromMillisecondsSinceEpoch(unixTime * 1000);
-    return DateFormat('hh:mm a').format(date);
-  }
-
-  void autoCompleteSearch(String value) async {
-    var result = await googlePlace.autocomplete.get(value);
-    if (result != null && result.predictions != null && mounted) {
-      setState(() {
-        predictions = result.predictions!;
-      });
-    }
-    ;
-  }
+String convertUnixToReadable(int unixTime) {
+  var date = DateTime.fromMillisecondsSinceEpoch(unixTime);
+  return DateFormat('hh:mm a').format(date);
 }
