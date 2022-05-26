@@ -4,12 +4,13 @@ import 'dart:convert';
 const serverUrl = 'otp.prod.sound.obaweb.org';
 
 class OpenTripPlannerWrapper {
-  static Future<List> getItineraries(Map<String, dynamic> params) async {
+  static Future<Map<String, dynamic>> getItineraries(
+      Map<String, dynamic> params) async {
     var uri = Uri.https(serverUrl, '/otp/routers/default/plan', params);
     print("uri: $uri");
     final jsonResponse = await http.get(uri);
     final body = json.decode(jsonResponse.body);
-    final itineraries = body['plan']['itineraries'];
+    final itineraries = body['plan'];
     return itineraries;
   }
 }

@@ -11,6 +11,7 @@ import 'package:flutter_typeahead/flutter_typeahead.dart';
 import 'package:google_place/google_place.dart';
 import 'package:intl/intl.dart';
 import 'package:date_time_picker/date_time_picker.dart';
+import 'package:scroll_app_bar/scroll_app_bar.dart';
 
 Future main() async {
   await dotenv.load(fileName: '.env');
@@ -43,8 +44,9 @@ class MyApp extends StatelessWidget {
 class LatLong {
   double lat;
   double lon;
+  String fancyName;
 
-  LatLong(this.lat, this.lon);
+  LatLong(this.lat, this.lon, this.fancyName);
 
   String toString() => '$lat,$lon';
 }
@@ -59,9 +61,9 @@ class TripPlannerForm extends StatefulWidget {
 class TripPlannerFormState extends State<TripPlannerForm> {
   final _formKey = GlobalKey<FormState>();
   final _fromController = TextEditingController();
-  final LatLong _fromLoc = LatLong(0.0, 0.0);
+  final LatLong _fromLoc = LatLong(0.0, 0.0, 'Origin');
   final _toController = TextEditingController();
-  final LatLong _toLoc = LatLong(0.0, 0.0);
+  final LatLong _toLoc = LatLong(0.0, 0.0, 'Destination');
   DateTime _timeController = DateTime.now();
   String leavingArrivingDropdownValue = 'Leaving now';
   List<AutocompletePrediction> predictions = [];
@@ -169,7 +171,8 @@ class TripPlannerFormState extends State<TripPlannerForm> {
                         itinerariesFuture.then((value) {
                           //_ItinerariesViewerState.setText(itineraries);
                           Navigator.of(context).push(MaterialPageRoute(
-                              builder: (context) => ResultsPage(value)));
+                              builder: (context) =>
+                                  ResultsPage(value, _fromLoc, _toLoc)));
                         });
                       }
                     },
@@ -277,9 +280,10 @@ class LegOverview extends StatelessWidget {
           ],
         ),
       ),
-      contentPadding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      contentPadding:
+          const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       subtitle: Text(subtitle),
-      trailing: Icon(Icons.arrow_forward_rounded),
+      trailing: const Icon(Icons.arrow_forward_rounded),
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => onTap,
@@ -440,6 +444,7 @@ Widget googleAutocompleteFormField(TextEditingController controller,
       if (detailsResult != null) {
         loc.lat = detailsResult.result!.geometry!.location!.lat!;
         loc.lon = detailsResult.result!.geometry!.location!.lng!;
+        loc.fancyName = detailsResult.result!.name!;
       }
     },
     validator: (value) {
@@ -451,9 +456,25 @@ Widget googleAutocompleteFormField(TextEditingController controller,
   );
 }
 
+String getPrettyTime(int seconds) {
+  final hours = seconds ~/ 3600;
+  final minutes = (seconds % 3600) ~/ 60;
+  final secondsLeft = seconds % 60;
+  final hoursString =
+      hours == 0 ? "" : (minutes > 0 ? "$hours hours, " : "$hours hours");
+  final minutesString = minutes == 0 ? "" : "$minutes minutes ";
+  return "$hoursString$minutesString";
+}
+
 class ResultsPage extends StatelessWidget {
-  final List<dynamic> itineraries;
-  const ResultsPage(this.itineraries);
+  final Map<String, dynamic> plan;
+  late List<dynamic> itineraries;
+  LatLong startLoc;
+  LatLong endLoc;
+  final scrollController = ScrollController();
+  ResultsPage(this.plan, this.startLoc, this.endLoc) {
+    itineraries = plan['itineraries'];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -462,12 +483,7 @@ class ResultsPage extends StatelessWidget {
     // iterate through itineraries
     for (var i = 0; i < itineraries.length; i++) {
       var itinerary = itineraries[i];
-      var durationString = '';
-      if (itinerary['duration'] > 3600) {
-        // more than an hour
-        durationString = '${(itinerary['duration'] / 3600).floor()} hours, ';
-      }
-      durationString += '${(itinerary['duration'] % 3600) ~/ 60} minutes';
+      final durationString = getPrettyTime(itinerary['duration']);
       tabTitles.add(Column(
         children: [
           Text(durationString),
@@ -475,13 +491,14 @@ class ResultsPage extends StatelessWidget {
               "${convertUnixToReadable(itinerary['startTime'])}-${convertUnixToReadable(itinerary['endTime'])}"),
         ],
       ));
-      final legsChildren = <Widget>[];
+      final legsChildren = <Widget>[TripStats(itinerary, true)];
       // iterate through itinerary legs
       for (var j = 0; j < itinerary['legs'].length; j++) {
         var leg = itinerary['legs'][j];
         legsChildren.add(LegOverview(leg));
       }
       var legs = ListView(
+        controller: scrollController,
         children: legsChildren,
       );
 
@@ -490,8 +507,38 @@ class ResultsPage extends StatelessWidget {
     final tabController = DefaultTabController(
       length: itineraries.length,
       child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Results'),
+        appBar: ScrollAppBar(
+          controller: scrollController,
+          title: Flexible(
+              child: Column(children: [
+            Align(
+                alignment: Alignment.topLeft,
+                child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 3),
+                    child: Text('Results'))),
+            Align(
+              alignment: Alignment.topLeft,
+              child: RichText(
+                text: TextSpan(
+                  children: [
+                    TextSpan(
+                      text: startLoc.fancyName,
+                    ),
+                    WidgetSpan(
+                        child: Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 4,
+                            ),
+                            child:
+                                Icon(Icons.arrow_forward_rounded, size: 17))),
+                    TextSpan(
+                      text: endLoc.fancyName,
+                    ),
+                  ],
+                ),
+              ),
+            )
+          ])),
           bottom: TabBar(tabs: tabTitles),
         ),
         body: TabBarView(
@@ -501,6 +548,69 @@ class ResultsPage extends StatelessWidget {
     );
     //return Scaffold(appBar: AppBar(title: const Text('Results')), body: ta);
     return tabController;
+  }
+}
+
+class TripStats extends StatelessWidget {
+  final Map<String, dynamic> itinerary;
+  final bool cyclingEnabled;
+  const TripStats(this.itinerary, this.cyclingEnabled);
+
+  @override
+  Widget build(BuildContext context) {
+    String transferText = "";
+    if (itinerary['transfers'] > 0) {
+      transferText =
+          "${itinerary['transfers']} transfer${itinerary['transfers'] > 1 ? "s" : ""}\n";
+    }
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(15),
+        child: Align(
+            alignment: Alignment.topLeft,
+            child: RichText(
+                text: TextSpan(children: [
+              WidgetSpan(
+                  child: Padding(
+                      padding: EdgeInsets.only(right: 10),
+                      child: Icon(
+                        getIconFromMode(cyclingEnabled ? 'BICYCLE' : 'WALK'),
+                        size: 30,
+                      ))),
+              WidgetSpan(
+                  child: Column(
+                children: [
+                  Text(
+                    "${getPrettyDistance(itinerary['walkDistance'])}\n${getPrettyTime(itinerary['walkTime'])}",
+                    style: TextStyle(
+                        fontSize: 14, color: Colors.black.withOpacity(0.5)),
+                  )
+                ],
+              )),
+              WidgetSpan(
+                  child: Visibility(
+                      child: Padding(
+                        padding: EdgeInsets.only(left: 30, right: 10),
+                        child: Icon(Icons.directions_transit, size: 30),
+                      ),
+                      visible: itinerary['transitTime'] > 0)),
+              WidgetSpan(
+                  child: Column(
+                children: [
+                  Padding(
+                    padding: EdgeInsets.only(
+                        bottom: itinerary['transitTime'] > 0 ? 0 : 7),
+                    child: Text(
+                      "$transferText${(getPrettyTime(itinerary['transitTime']))}",
+                      style: TextStyle(
+                          fontSize: 14, color: Colors.black.withOpacity(0.5)),
+                    ),
+                  )
+                ],
+              )),
+            ]))),
+      ),
+    );
   }
 }
 
