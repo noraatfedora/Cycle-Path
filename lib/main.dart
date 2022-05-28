@@ -171,8 +171,11 @@ class TripPlannerFormState extends State<TripPlannerForm> {
                         itinerariesFuture.then((value) {
                           //_ItinerariesViewerState.setText(itineraries);
                           Navigator.of(context).push(MaterialPageRoute(
-                              builder: (context) =>
-                                  ResultsPage(value, _fromLoc, _toLoc)));
+                              builder: (context) => ResultsPage(
+                                  plan: value,
+                                  startLoc: _fromLoc,
+                                  endLoc: _toLoc,
+                                  query: params)));
                         });
                       }
                     },
@@ -468,16 +471,20 @@ String getPrettyTime(int seconds) {
 
 class ResultsPage extends StatelessWidget {
   final Map<String, dynamic> plan;
-  late List<dynamic> itineraries;
+  final Map<String, dynamic> query;
   LatLong startLoc;
   LatLong endLoc;
   final scrollController = ScrollController();
-  ResultsPage(this.plan, this.startLoc, this.endLoc) {
-    itineraries = plan['itineraries'];
-  }
+  ResultsPage(
+      {Key? key,
+      required this.plan,
+      required this.startLoc,
+      required this.endLoc,
+      required this.query});
 
   @override
   Widget build(BuildContext context) {
+    List<dynamic> itineraries = plan['itineraries'];
     var tabChildren = <Widget>[];
     var tabTitles = <Widget>[];
     // iterate through itineraries
@@ -491,7 +498,9 @@ class ResultsPage extends StatelessWidget {
               "${convertUnixToReadable(itinerary['startTime'])}-${convertUnixToReadable(itinerary['endTime'])}"),
         ],
       ));
-      final legsChildren = <Widget>[TripStats(itinerary, true)];
+      final legsChildren = <Widget>[
+        ItineraryStats(itinerary: itinerary, query: query)
+      ];
       // iterate through itinerary legs
       for (var j = 0; j < itinerary['legs'].length; j++) {
         var leg = itinerary['legs'][j];
@@ -551,13 +560,48 @@ class ResultsPage extends StatelessWidget {
   }
 }
 
-class TripStats extends StatelessWidget {
+class SaveableItinerary {
+  final LatLong startLoc;
+  final LatLong endLoc;
   final Map<String, dynamic> itinerary;
-  final bool cyclingEnabled;
-  const TripStats(this.itinerary, this.cyclingEnabled);
+  final Map<String, dynamic> query;
+  final bool isSaved = false;
+  SaveableItinerary(
+      {required this.startLoc,
+      required this.endLoc,
+      required this.itinerary,
+      required this.query});
+}
+
+class ItineraryStats extends StatefulWidget {
+  final Map<String, dynamic> itinerary;
+  final Map<String, dynamic> query;
+
+  ItineraryStats({Key? key, required this.itinerary, required this.query})
+      : super(key: key);
+  bool saved = false;
 
   @override
+  State<ItineraryStats> createState() => _ItineraryStatsState();
+}
+
+class _ItineraryStatsState extends State<ItineraryStats> {
+  bool saved;
+
+  bool toggleSaved() {
+    setState(() {
+      saved = !saved;
+    });
+    return saved;
+  }
+
+  _ItineraryStatsState({this.saved = false});
+  @override
   Widget build(BuildContext context) {
+    Map<String, dynamic> itinerary = widget.itinerary;
+    Map<String, dynamic> query = widget.query;
+    bool cyclingEnabled = true; // TODO: get this from query
+
     String transferText = "";
     if (itinerary['transfers'] > 0) {
       transferText =
@@ -565,51 +609,74 @@ class TripStats extends StatelessWidget {
     }
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(15),
-        child: Align(
-            alignment: Alignment.topLeft,
-            child: RichText(
-                text: TextSpan(children: [
-              WidgetSpan(
+          padding: const EdgeInsets.all(15),
+          child: Row(
+            children: [
+              Expanded(
+                  child: Align(
+                      alignment: Alignment.topLeft,
+                      child: RichText(
+                          text: TextSpan(children: [
+                        WidgetSpan(
+                            child: Padding(
+                                padding: EdgeInsets.only(right: 10),
+                                child: Icon(
+                                  getIconFromMode(
+                                      cyclingEnabled ? 'BICYCLE' : 'WALK'),
+                                  size: 30,
+                                ))),
+                        WidgetSpan(
+                            child: Column(
+                          children: [
+                            Text(
+                              "${getPrettyDistance(itinerary['walkDistance'])}\n${getPrettyTime(itinerary['walkTime'])}",
+                              style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.black.withOpacity(0.5)),
+                            )
+                          ],
+                        )),
+                        WidgetSpan(
+                            child: Visibility(
+                                child: Padding(
+                                  padding: EdgeInsets.only(left: 30, right: 10),
+                                  child:
+                                      Icon(Icons.directions_transit, size: 30),
+                                ),
+                                visible: itinerary['transitTime'] > 0)),
+                        WidgetSpan(
+                            child: Column(
+                          children: [
+                            Padding(
+                              padding: EdgeInsets.only(
+                                  bottom: itinerary['transitTime'] > 0 ? 0 : 7),
+                              child: Text(
+                                "$transferText${(getPrettyTime(itinerary['transitTime']))}",
+                                style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.black.withOpacity(0.5)),
+                              ),
+                            )
+                          ],
+                        )),
+                      ])))),
+              // allign a star icon right
+              Align(
+                  alignment: Alignment.topRight,
                   child: Padding(
-                      padding: EdgeInsets.only(right: 10),
-                      child: Icon(
-                        getIconFromMode(cyclingEnabled ? 'BICYCLE' : 'WALK'),
-                        size: 30,
+                      padding: EdgeInsets.only(left: 10),
+                      // star is hollow until clicked
+                      child: IconButton(
+                        icon: Icon(saved ? Icons.star : Icons.star_border,
+                            size: 30),
+                        onPressed: () {
+                          toggleSaved();
+                          debugPrint('star pressed!!!');
+                        },
                       ))),
-              WidgetSpan(
-                  child: Column(
-                children: [
-                  Text(
-                    "${getPrettyDistance(itinerary['walkDistance'])}\n${getPrettyTime(itinerary['walkTime'])}",
-                    style: TextStyle(
-                        fontSize: 14, color: Colors.black.withOpacity(0.5)),
-                  )
-                ],
-              )),
-              WidgetSpan(
-                  child: Visibility(
-                      child: Padding(
-                        padding: EdgeInsets.only(left: 30, right: 10),
-                        child: Icon(Icons.directions_transit, size: 30),
-                      ),
-                      visible: itinerary['transitTime'] > 0)),
-              WidgetSpan(
-                  child: Column(
-                children: [
-                  Padding(
-                    padding: EdgeInsets.only(
-                        bottom: itinerary['transitTime'] > 0 ? 0 : 7),
-                    child: Text(
-                      "$transferText${(getPrettyTime(itinerary['transitTime']))}",
-                      style: TextStyle(
-                          fontSize: 14, color: Colors.black.withOpacity(0.5)),
-                    ),
-                  )
-                ],
-              )),
-            ]))),
-      ),
+              // star is filled when clicked
+            ],
+          )),
     );
   }
 }
