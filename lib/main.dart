@@ -250,7 +250,9 @@ class LegOverview extends StatelessWidget {
     final Widget onTap;
     if (leg['transitLeg']) {
       title = "Get on ${leg["agencyName"]} ${getFancyRouteName(leg)}";
-      subtitle = distanceInfo;
+      String transitInfo =
+          '$distanceInfo | ${leg["intermediateStops"].length} stops';
+      subtitle = transitInfo;
       onTap = TransitLegDetails(leg);
     } else {
       String verb = 'Bike';
@@ -299,22 +301,33 @@ class TransitLegDetails extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    List<ListTile> stopList = [];
+    stopList.add(ListTile(
+      leading: const Icon(Icons.start),
+      title: Text('Get on at ${leg["from"]["name"]}'),
+      subtitle: Text(convertUnixToReadable(leg["startTime"])),
+    ));
+    for (var stop in leg["intermediateStops"]) {
+      stopList.add(TransitStop(stop: stop, mode: leg['mode']));
+    }
+    stopList.add(ListTile(
+      leading: const Icon(Icons.place),
+      title: Text('Get off at ${leg["to"]["name"]}'),
+      subtitle: Text(convertUnixToReadable(leg["endTime"])),
+    ));
     return Scaffold(
         appBar: AppBar(
           title: Text(getFancyRouteName(leg)),
         ),
-        body: ListView.builder(
-            itemCount: leg["intermediateStops"].length,
-            itemBuilder: (context, index) {
-              return TransitStop(leg['intermediateStops'][index], leg['mode']);
-            }));
+        body: ListView(children: stopList));
   }
 }
 
-class TransitStop extends StatelessWidget {
+class TransitStop extends ListTile {
   final stop;
   final mode;
-  const TransitStop(this.stop, this.mode);
+  const TransitStop({@required this.stop, @required this.mode});
+
   @override
   Widget build(BuildContext context) {
     return ListTile(
@@ -325,7 +338,7 @@ class TransitStop extends StatelessWidget {
   }
 }
 
-class NonTransitLegDetails extends StatelessWidget {
+class NonTransitLegDetails extends ListTile {
   final leg;
   const NonTransitLegDetails(this.leg);
 
