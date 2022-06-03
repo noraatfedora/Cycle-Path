@@ -197,21 +197,26 @@ String getPrettyDistance(double meters) {
 }
 
 String getFancyRouteName(leg) {
-  late String transitInfo;
-  if (leg.containsKey('routeShortName')) {
-    if (leg.containsKey('headsign')) {
-      transitInfo = '${leg["routeShortName"]}: ${leg["headsign"]}';
+  if (leg['transitLeg']) {
+    late String transitInfo;
+    if (leg.containsKey('routeShortName')) {
+      if (leg.containsKey('headsign')) {
+        transitInfo = '${leg["routeShortName"]}: ${leg["headsign"]}';
+      } else {
+        transitInfo = '${leg["routeShortName"]}';
+      }
     } else {
-      transitInfo = '${leg["routeShortName"]}';
+      if (leg.containsKey('headsign')) {
+        transitInfo = '${leg["headsign"]}';
+      } else {
+        transitInfo = '${leg["mode"]}';
+      }
     }
+    return transitInfo;
   } else {
-    if (leg.containsKey('headsign')) {
-      transitInfo = '${leg["headsign"]}';
-    } else {
-      transitInfo = '${leg["mode"]}';
-    }
+    String verb = getVerbFromMode(leg);
+    return "$verb from ${leg['from']['name']} to ${leg["to"]["name"]}";
   }
-  return transitInfo;
 }
 
 IconData getIconFromMode(String mode) {
@@ -235,6 +240,17 @@ IconData getIconFromMode(String mode) {
   return icon;
 }
 
+String getVerbFromMode(leg) {
+  String verb = 'Bike';
+  if (leg['mode'] != 'BICYCLE') {
+    // convert the leg mode to start with an
+    // uppercase letter
+    verb =
+        leg['mode'][0].toUpperCase() + leg['mode'].toLowerCase().substring(1);
+  }
+  return verb;
+}
+
 class LegOverview extends StatelessWidget {
   //  const LegOverview({Key? key}) : super(key: key);
   final leg;
@@ -255,13 +271,7 @@ class LegOverview extends StatelessWidget {
       subtitle = transitInfo;
       onTap = TransitLegDetails(leg);
     } else {
-      String verb = 'Bike';
-      if (leg['mode'] != 'BICYCLE') {
-        // convert the leg mode to start with an
-        // uppercase letter
-        verb = leg['mode'][0].toUpperCase() +
-            leg['mode'].toLowerCase().substring(1);
-      }
+      String verb = getVerbFromMode(leg);
       title = "$verb from ${leg['from']['name']} to ${leg["to"]["name"]}";
       subtitle = distanceInfo;
       onTap = NonTransitLegDetails(leg);
