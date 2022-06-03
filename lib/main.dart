@@ -200,21 +200,26 @@ String getPrettyDistance(double meters) {
 }
 
 String getFancyRouteName(leg) {
-  late String transitInfo;
-  if (leg.containsKey('routeShortName')) {
-    if (leg.containsKey('headsign')) {
-      transitInfo = '${leg["routeShortName"]}: ${leg["headsign"]}';
+  if (leg['transitLeg']) {
+    late String transitInfo;
+    if (leg.containsKey('routeShortName')) {
+      if (leg.containsKey('headsign')) {
+        transitInfo = '${leg["routeShortName"]}: ${leg["headsign"]}';
+      } else {
+        transitInfo = '${leg["routeShortName"]}';
+      }
     } else {
-      transitInfo = '${leg["routeShortName"]}';
+      if (leg.containsKey('headsign')) {
+        transitInfo = '${leg["headsign"]}';
+      } else {
+        transitInfo = '${leg["mode"]}';
+      }
     }
+    return transitInfo;
   } else {
-    if (leg.containsKey('headsign')) {
-      transitInfo = '${leg["headsign"]}';
-    } else {
-      transitInfo = '${leg["mode"]}';
-    }
+    String verb = getVerbFromMode(leg);
+    return "$verb from ${leg['from']['name']} to ${leg["to"]["name"]}";
   }
-  return transitInfo;
 }
 
 IconData getIconFromMode(String mode) {
@@ -238,6 +243,17 @@ IconData getIconFromMode(String mode) {
   return icon;
 }
 
+String getVerbFromMode(leg) {
+  String verb = 'Bike';
+  if (leg['mode'] != 'BICYCLE') {
+    // convert the leg mode to start with an
+    // uppercase letter
+    verb =
+        leg['mode'][0].toUpperCase() + leg['mode'].toLowerCase().substring(1);
+  }
+  return verb;
+}
+
 class LegOverview extends StatelessWidget {
   //  const LegOverview({Key? key}) : super(key: key);
   final leg;
@@ -253,16 +269,12 @@ class LegOverview extends StatelessWidget {
     final Widget onTap;
     if (leg['transitLeg']) {
       title = "Get on ${leg["agencyName"]} ${getFancyRouteName(leg)}";
-      subtitle = distanceInfo;
+      String transitInfo =
+          '$distanceInfo | ${leg["intermediateStops"].length} stops';
+      subtitle = transitInfo;
       onTap = TransitLegDetails(leg);
     } else {
-      String verb = 'Bike';
-      if (leg['mode'] != 'BICYCLE') {
-        // convert the leg mode to start with an
-        // uppercase letter
-        verb = leg['mode'][0].toUpperCase() +
-            leg['mode'].toLowerCase().substring(1);
-      }
+      String verb = getVerbFromMode(leg);
       title = "$verb from ${leg['from']['name']} to ${leg["to"]["name"]}";
       subtitle = distanceInfo;
       onTap = NonTransitLegDetails(leg);
@@ -302,22 +314,33 @@ class TransitLegDetails extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    List<ListTile> stopList = [];
+    stopList.add(ListTile(
+      leading: const Icon(Icons.start),
+      title: Text('Get on at ${leg["from"]["name"]}'),
+      subtitle: Text(convertUnixToReadable(leg["startTime"])),
+    ));
+    for (var stop in leg["intermediateStops"]) {
+      stopList.add(TransitStop(stop: stop, mode: leg['mode']));
+    }
+    stopList.add(ListTile(
+      leading: const Icon(Icons.place),
+      title: Text('Get off at ${leg["to"]["name"]}'),
+      subtitle: Text(convertUnixToReadable(leg["endTime"])),
+    ));
     return Scaffold(
         appBar: AppBar(
           title: Text(getFancyRouteName(leg)),
         ),
-        body: ListView.builder(
-            itemCount: leg["intermediateStops"].length,
-            itemBuilder: (context, index) {
-              return TransitStop(leg['intermediateStops'][index], leg['mode']);
-            }));
+        body: ListView(children: stopList));
   }
 }
 
-class TransitStop extends StatelessWidget {
+class TransitStop extends ListTile {
   final stop;
   final mode;
-  const TransitStop(this.stop, this.mode);
+  const TransitStop({@required this.stop, @required this.mode});
+
   @override
   Widget build(BuildContext context) {
     return ListTile(
@@ -328,7 +351,7 @@ class TransitStop extends StatelessWidget {
   }
 }
 
-class NonTransitLegDetails extends StatelessWidget {
+class NonTransitLegDetails extends ListTile {
   final leg;
   const NonTransitLegDetails(this.leg);
 
