@@ -1,5 +1,9 @@
+import 'dart:io';
+
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:sqflite/sqflite.dart';
+import 'package:path/path.dart';
 
 const serverUrl = 'otp.prod.sound.obaweb.org';
 
@@ -13,59 +17,40 @@ class OpenTripPlannerWrapper {
     final itineraries = body['plan'];
     return itineraries;
   }
-}
-/*
-class Trip {
-  late int startTime;
-  late int endTime;
-  late int transfers;
-  late List<Leg> legs;
 
-  Trip(Map<String, dynamic> response) {
-    startTime = response['startTime'];
-    endTime = response['endTime'];
-    transfers = response['transfers'];
-    legsResponse = response['legs'];
-    for (leg in legsResponse) {
-      legs.add(Leg(leg));
+  static Future<Database> openAndSetupDatabase() async {
+    final dbPath = await getDatabasesPath();
+    final db = await openDatabase(join(dbPath, 'otp3.db'));
+    await db.execute(
+        'CREATE TABLE IF NOT EXISTS queries (id INTEGER PRIMARY KEY, params TEXT, data TEXT, datetime TEXT)');
+    return db;
+  }
+
+  static void saveQuery({
+    required Map<String, dynamic> params,
+    required Map<String, dynamic> data,
+  }) async {
+    final db = await openAndSetupDatabase();
+    final last = await db
+        .rawQuery("SELECT * FROM queries ORDER BY datetime DESC LIMIT 1");
+    if (!last.isEmpty && last[0]['params'] != json.encode(params)) {
+      //print(
+      //    "otp:\nLast params: ${last[0]['params']}\nnew params: ${json.encode(params)}");
+      await db.insert('queries', {
+        'params': json.encode(params),
+        'data': json.encode(data),
+        'datetime': DateTime.now().toString()
+      });
     }
+
+    // insert params into queries table as json
+  }
+
+  static Future<List> getQueries() async {
+    final db = await openAndSetupDatabase();
+    final queries = await db
+        .rawQuery("SELECT * FROM queries ORDER BY datetime DESC LIMIT 20");
+    print(queries);
+    return queries;
   }
 }
-
-class Place {
-  late final String name;
-  late final double lat;
-  late final double lon;
-
-  Place(Map<String, dynamic> response) {
-    name = response['name'];
-    lat = response['lat'];
-    lon = response['lon'];
-  }
-}
-
-class Leg {
-  late int startTime;
-  late int endTime;
-  late String mode;
-  late double distance;
-  late Place from;
-  late Place to;
-
-  Leg(Map<String, dynamic> response) {
-    startTime = response['startTime'];
-    endTime = response['endTime'];
-    mode = response['mode'];
-    distance = response['distance'];
-    from = Place(response['from']);
-    to = Place(response['to']);
-  }
-}
-
-void main(List<String> args) {
-  OpenTripPlannerWrapper.getTrips({
-    "fromPlace": "47.638184,-122.159497",
-    "toPlace": "47.620937,-122.297215",
-  });
-}
-*/

@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:biking_to_the_bus_stop/otp.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -34,7 +33,8 @@ class MyApp extends StatelessWidget {
           title: const Text('Cycle Path'),
         ),
         body: Center(
-          child: TripPlannerForm(),
+          child: Column(children: [TripPlannerForm(), RecentAndSavedList()]),
+          //child: Column(children: [TripPlannerForm(), Text('afds')]),
         ),
       ),
     );
@@ -133,55 +133,144 @@ class TripPlannerFormState extends State<TripPlannerForm> {
             Padding(
                 padding: formPadding,
                 child: ElevatedButton(
-                    onPressed: () {
-                      if (_formKey.currentState != null &&
-                          _formKey.currentState!.validate()) {
-                        // If the form is valid, display a Snackbar.
-                        ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('loading routes...')));
-                        /*
+                  onPressed: () {
+                    if (_formKey.currentState != null &&
+                        _formKey.currentState!.validate()) {
+                      /*
                     final itinerariesFuture =
                         OpenTripPlannerWrapper.getItineraries({
                       "fromPlace": "47.638184,-122.159497",
                       "toPlace": "47.620937,-122.297215",
                     });
                     */
-                        Map<String, String> params = {
-                          "fromPlace": _fromLoc.toString(),
-                          "toPlace": _toLoc.toString(),
-                          "mode": "TRANSIT, BICYCLE",
-                          "optimize": "TRANSFERS",
-                          //"time": (DateTime.now().millisecondsSinceEpoch / 1000)
-                          //    .toString(),
-                          "arriveBy":
-                              (leavingArrivingDropdownValue == 'Arrive by')
-                                  .toString(),
-                          "showIntermediateStops": "true",
-                          "maxWalkDistance": "99999999999",
-                        };
-                        if (leavingArrivingDropdownValue != 'Leaving now') {
-                          params['time'] =
-                              "${_timeController.hour}:${_timeController.minute}";
-                          params['date'] =
-                              "${_timeController.year}-${_timeController.month}-${_timeController.day}";
-                        }
-
-                        final itinerariesFuture =
-                            OpenTripPlannerWrapper.getItineraries(params);
-                        itinerariesFuture.then((value) {
-                          //_ItinerariesViewerState.setText(itineraries);
-                          Navigator.of(context).push(MaterialPageRoute(
-                              builder: (context) => ResultsPage(
-                                  plan: value,
-                                  startLoc: _fromLoc,
-                                  endLoc: _toLoc,
-                                  query: params)));
-                        });
+                      Map<String, String> params = {
+                        "fromPlace": _fromLoc.toString(),
+                        "toPlace": _toLoc.toString(),
+                        "mode": "TRANSIT, BICYCLE",
+                        "optimize": "TRANSFERS",
+                        //"time": (DateTime.now().millisecondsSinceEpoch / 1000)
+                        //    .toString(),
+                        "arriveBy":
+                            (leavingArrivingDropdownValue == 'Arrive by')
+                                .toString(),
+                        "showIntermediateStops": "true",
+                        "maxWalkDistance": "99999999999",
+                      };
+                      if (leavingArrivingDropdownValue != 'Leaving now') {
+                        params['time'] =
+                            "${_timeController.hour}:${_timeController.minute}";
+                        params['date'] =
+                            "${_timeController.year}-${_timeController.month}-${_timeController.day}";
                       }
-                    },
-                    child: const Text('Submit')))
+                      OpenTripPlannerWrapper.saveQuery(params: params, data: {
+                        "fromPlaceName": _fromLoc.fancyName,
+                        "toPlaceName": _toLoc.fancyName
+                      });
+                      loadRoutes(
+                          context: context,
+                          fromLoc: _fromLoc,
+                          toLoc: _toLoc,
+                          params: params);
+                    }
+                  },
+                  child: Padding(
+                      padding: EdgeInsets.symmetric(
+                          horizontal: 10.0, vertical: 16.0),
+                      child: RichText(
+                          text: TextSpan(children: [
+                        WidgetSpan(child: Icon(Icons.place, size: 25)),
+                        TextSpan(text: 'Plan', style: TextStyle(fontSize: 20))
+                      ]))),
+                ))
           ],
         ));
+  }
+}
+
+void loadRoutes(
+    {required BuildContext context,
+    required Map<String, dynamic> params,
+    required LatLong fromLoc,
+    required LatLong toLoc}) {
+  ScaffoldMessenger.of(context)
+      .showSnackBar(SnackBar(content: Text('loading routes...')));
+  final itinerariesFuture = OpenTripPlannerWrapper.getItineraries(params);
+  itinerariesFuture.then((value) {
+    //_ItinerariesViewerState.setText(itineraries);
+    Navigator.of(context).push(MaterialPageRoute(
+        builder: (context) => ResultsPage(
+            plan: value, startLoc: fromLoc, endLoc: toLoc, query: params)));
+  });
+}
+
+class RecentAndSavedList extends StatefulWidget {
+  RecentAndSavedList({Key? key}) : super(key: key);
+
+  @override
+  State<RecentAndSavedList> createState() => _RecentAndSavedListState();
+}
+
+class _RecentAndSavedListState extends State<RecentAndSavedList> {
+  List queries = [];
+  @override
+  Widget build(BuildContext context) {
+    OpenTripPlannerWrapper.getQueries().then((value) {
+      setState(() {
+        this.queries = value;
+      });
+    });
+    return Expanded(
+        child: ListView.builder(
+            itemCount: queries.length,
+            itemBuilder: (BuildContext context, int index) {
+              Map<String, dynamic> data = json.decode(queries[index]['data']);
+              Map<String, dynamic> params =
+                  json.decode(queries[index]['params']);
+              String subtitle = "Leaving now";
+              if (params.containsKey("time")) {
+                if (params['arriveBy'] == "true") {
+                  subtitle = "Arrive by ";
+                } else {
+                  subtitle = "Leaving at ";
+                }
+                subtitle += params['time']!; // not a unix time it's weird
+              }
+              return ListTile(
+                  leading: Icon(Icons.history, size: 30),
+                  title: RichText(
+                      text: TextSpan(children: [
+                    TextSpan(
+                        text: data['fromPlaceName'],
+                        style: TextStyle(color: Colors.black)),
+                    WidgetSpan(
+                        child: Icon(Icons.arrow_forward_rounded, size: 17)),
+                    TextSpan(
+                        text: data['toPlaceName'],
+                        style: TextStyle(color: Colors.black))
+                  ])),
+                  trailing: Icon(Icons.arrow_forward_rounded),
+                  //title: Text('sdf'),
+                  //"${queries[index]['fromPlace']} to ${queries[index]['toPlace']}"),
+                  subtitle: Text(subtitle),
+                  onTap: () {
+                    var fromLoc = LatLong(0, 0, data['fromPlaceName']);
+                    var toLoc = LatLong(0, 0, data['toPlaceName']);
+                    loadRoutes(
+                        context: context,
+                        params: params,
+                        fromLoc: fromLoc,
+                        toLoc: toLoc);
+                  });
+            }));
+    /*
+    return Expanded(
+        child: ListView.builder(
+            itemCount: 5,
+            itemBuilder: (BuildContext context, int index) {
+              return ListTile(title: Text("$index"));
+              //subtitle: Text("Saved"),
+            }));
+            */
   }
 }
 
@@ -194,7 +283,7 @@ String getPrettyDistance(double meters) {
   // if distance is less than 0.1 miles, display distance in feet
   if (metersToMiles(meters) < 0.1) {
     // convert meters to feet
-    prettyDistance = "${(meters! * 3.28084).toStringAsFixed(0)} feet";
+    prettyDistance = "${(meters * 3.28084).toStringAsFixed(0)} feet";
   }
   return prettyDistance;
 }

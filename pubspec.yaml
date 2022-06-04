@@ -38,6 +38,10 @@ dependencies:
   date_time_picker: ^2.1.0
   scroll_app_bar: ^2.0.0
   shared_preferences: ^2.0.15
+  sqflite:
+  #sqflite_common_ffi:
+  #sqflite_common: ^2.2.1+1
+  #sqlite3_flutter_libs:
 
 
 dev_dependencies:
