@@ -29,7 +29,7 @@ class MyApp extends StatelessWidget {
       title: 'Cycle Path',
       home: Scaffold(
         appBar: AppBar(
-          leading: const Icon(Icons.directions_bike),
+          leading: Image.asset('assets/icon/cyclepath_header.png'),
           title: const Text('Cycle Path'),
         ),
         body: Center(
@@ -586,7 +586,6 @@ class ResultsPage extends StatelessWidget {
   final Map<String, dynamic> query;
   LatLong startLoc;
   LatLong endLoc;
-  final scrollController = ScrollController();
   ResultsPage(
       {Key? key,
       required this.plan,
@@ -619,7 +618,6 @@ class ResultsPage extends StatelessWidget {
         legsChildren.add(LegOverview(leg));
       }
       var legs = ListView(
-        controller: scrollController,
         children: legsChildren,
       );
 
@@ -628,8 +626,8 @@ class ResultsPage extends StatelessWidget {
     final tabController = DefaultTabController(
       length: itineraries.length,
       child: Scaffold(
-        appBar: ScrollAppBar(
-          controller: scrollController,
+        appBar: AppBar(
+          toolbarHeight: 80,
           title: Flexible(
               child: Column(children: [
             Align(
