@@ -37,6 +37,7 @@ dependencies:
   intl: ^0.17.0
   date_time_picker: ^2.1.0
   scroll_app_bar: ^2.0.0
+  maps_launcher: ^2.0.1
   shared_preferences: ^2.0.15
   sqflite:
   #sqflite_common_ffi:

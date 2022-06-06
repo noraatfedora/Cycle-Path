@@ -10,7 +10,7 @@ import 'package:flutter_typeahead/flutter_typeahead.dart';
 import 'package:google_place/google_place.dart';
 import 'package:intl/intl.dart';
 import 'package:date_time_picker/date_time_picker.dart';
-import 'package:scroll_app_bar/scroll_app_bar.dart';
+import 'package:maps_launcher/maps_launcher.dart';
 
 Future main() async {
   await dotenv.load(fileName: '.env');
@@ -449,6 +449,12 @@ class NonTransitLegDetails extends ListTile {
     return Scaffold(
       appBar: AppBar(
         title: Text(getFancyRouteName(leg)),
+        leading: IconButton(
+            icon: Icon(Icons.explore),
+            onPressed: () {
+              MapsLauncher.launchQuery(
+                  "${leg['to']['lat']}, ${leg['to']['lon']}");
+            }),
       ),
       body: ListView.builder(
         itemCount: leg["steps"].length,
