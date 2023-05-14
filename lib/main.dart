@@ -219,58 +219,56 @@ class _RecentAndSavedListState extends State<RecentAndSavedList> {
         this.queries = value;
       });
     });
+    List saved = [];
+    List recents = [];
+    for (var query in queries) {
+      Map<String, dynamic> data = json.decode(query['data']);
+      Map<String, dynamic> params = json.decode(query['params']);
+      String subtitle = "Leaving now";
+      if (params.containsKey("time")) {
+        if (params['arriveBy'] == "true") {
+          subtitle = "Arrive by ";
+        } else {
+          subtitle = "Leaving at ";
+        }
+        subtitle += params['time']!; // not a unix time it's weird
+      }
+      recents.add(ListTile(
+          leading: Icon(Icons.history, size: 30),
+          title: RichText(
+              text: TextSpan(children: [
+            TextSpan(
+                text: data['fromPlaceName'],
+                style: TextStyle(color: Colors.black)),
+            WidgetSpan(child: Icon(Icons.arrow_forward_rounded, size: 17)),
+            TextSpan(
+                text: data['toPlaceName'],
+                style: TextStyle(color: Colors.black))
+          ])),
+          trailing: Icon(Icons.arrow_forward_rounded),
+          //title: Text('sdf'),
+          //"${queries[index]['fromPlace']} to ${queries[index]['toPlace']}"),
+          subtitle: Text(subtitle),
+          onTap: () {
+            var fromLoc = LatLong(0, 0, data['fromPlaceName']);
+            var toLoc = LatLong(0, 0, data['toPlaceName']);
+            loadRoutes(
+                context: context,
+                params: params,
+                fromLoc: fromLoc,
+                toLoc: toLoc);
+          }));
+    }
+    // combine recents and saved into single list
+    List combined = [];
+    combined.addAll(recents);
+    combined.addAll(saved);
     return Expanded(
         child: ListView.builder(
-            itemCount: queries.length,
+            itemCount: combined.length,
             itemBuilder: (BuildContext context, int index) {
-              Map<String, dynamic> data = json.decode(queries[index]['data']);
-              Map<String, dynamic> params =
-                  json.decode(queries[index]['params']);
-              String subtitle = "Leaving now";
-              if (params.containsKey("time")) {
-                if (params['arriveBy'] == "true") {
-                  subtitle = "Arrive by ";
-                } else {
-                  subtitle = "Leaving at ";
-                }
-                subtitle += params['time']!; // not a unix time it's weird
-              }
-              return ListTile(
-                  leading: Icon(Icons.history, size: 30),
-                  title: RichText(
-                      text: TextSpan(children: [
-                    TextSpan(
-                        text: data['fromPlaceName'],
-                        style: TextStyle(color: Colors.black)),
-                    WidgetSpan(
-                        child: Icon(Icons.arrow_forward_rounded, size: 17)),
-                    TextSpan(
-                        text: data['toPlaceName'],
-                        style: TextStyle(color: Colors.black))
-                  ])),
-                  trailing: Icon(Icons.arrow_forward_rounded),
-                  //title: Text('sdf'),
-                  //"${queries[index]['fromPlace']} to ${queries[index]['toPlace']}"),
-                  subtitle: Text(subtitle),
-                  onTap: () {
-                    var fromLoc = LatLong(0, 0, data['fromPlaceName']);
-                    var toLoc = LatLong(0, 0, data['toPlaceName']);
-                    loadRoutes(
-                        context: context,
-                        params: params,
-                        fromLoc: fromLoc,
-                        toLoc: toLoc);
-                  });
+              return combined[index];
             }));
-    /*
-    return Expanded(
-        child: ListView.builder(
-            itemCount: 5,
-            itemBuilder: (BuildContext context, int index) {
-              return ListTile(title: Text("$index"));
-              //subtitle: Text("Saved"),
-            }));
-            */
   }
 }
 
@@ -704,10 +702,18 @@ class ItineraryStats extends StatefulWidget {
 class _ItineraryStatsState extends State<ItineraryStats> {
   bool saved;
 
-  bool toggleSaved() {
+  bool toggleSaved(itinerary, query) {
     setState(() {
       saved = !saved;
     });
+
+    if (!saved) {
+      // add itinerary to database as a starred item
+      OpenTripPlannerWrapper.saveStarred(params: query, data: itinerary);
+    } else {
+      // remove itinerary from database as a starred item
+      OpenTripPlannerWrapper.removeStarred(params: query, data: itinerary);
+    }
     return saved;
   }
 
@@ -786,7 +792,7 @@ class _ItineraryStatsState extends State<ItineraryStats> {
                         icon: Icon(saved ? Icons.star : Icons.star_border,
                             size: 30),
                         onPressed: () {
-                          toggleSaved();
+                          toggleSaved(itinerary, query);
                           debugPrint('star pressed!!!');
                         },
                       ))),

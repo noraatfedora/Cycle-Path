@@ -23,6 +23,8 @@ class OpenTripPlannerWrapper {
     final db = await openDatabase(join(dbPath, 'otp3.db'));
     await db.execute(
         'CREATE TABLE IF NOT EXISTS queries (id INTEGER PRIMARY KEY, params TEXT, data TEXT, datetime TEXT)');
+    await db.execute(
+        'CREATE TABLE IF NOT EXISTS starred (id INTEGER PRIMARY KEY, params TEXT, data TEXT, datetime TEXT)');
     return db;
   }
 
@@ -44,6 +46,27 @@ class OpenTripPlannerWrapper {
     }
 
     // insert params into queries table as json
+  }
+
+  static void saveStarred({
+    required Map<String, dynamic> params,
+    required Map<String, dynamic> data,
+  }) async {
+    final db = await openAndSetupDatabase();
+    await db.insert('starred', {
+      'params': json.encode(params),
+      'data': json.encode(data),
+      'datetime': DateTime.now().toString()
+    });
+  }
+
+  static void removeStarred({
+    required Map<String, dynamic> params,
+    required Map<String, dynamic> data,
+  }) async {
+    final db = await openAndSetupDatabase();
+    await db.delete('starred',
+        where: 'params = ? AND data = ?', whereArgs: [params, data]);
   }
 
   static Future<List> getQueries() async {
